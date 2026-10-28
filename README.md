@@ -28,7 +28,7 @@ python3 qrsend.py top.v
 
 ## 手機端：decoder
 
-用 iPhone Safari 開啟 decoder 網頁，按「開始掃描」後把鏡頭對準螢幕。畫面上的格子會顯示收到哪幾張，缺的編號會列在下方。收齊後會自動驗證 SHA-256，可以存到「檔案」、分享或複製全文。按「掃下一個檔」繼續收下一個。
+用 iPhone Safari 開啟 <https://wsturkey6-hash.github.io/qr_transfer/>，按「開始掃描」後把鏡頭對準螢幕。畫面上的格子會顯示收到哪幾張，缺的編號會列在下方。收齊後會自動驗證 SHA-256，可以存到「檔案」、分享或複製全文。按「掃下一個檔」繼續收下一個。
 
 網頁需要 HTTPS 才能使用相機，所以放在 GitHub Pages（`docs/` 資料夾）。
 
