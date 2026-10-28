@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR 檔案接收</title>
+<style>
+:root {
+  --bg: #f6f6f4; --card: #fff; --text: #1c1c1c; --muted: #6b6b6b; --line: #dedede;
+  --accent: #1f6feb; --ok: #1a7f37; --bad: #cf222e; --cell: #e4e4e4; --cell-on: #1a7f37;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111; --card: #1c1c1c; --text: #eee; --muted: #9a9a9a; --line: #333;
+    --accent: #4c8dff; --ok: #3fb950; --bad: #ff6b6b; --cell: #333; --cell-on: #3fb950;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, "PingFang TC", sans-serif; }
+main { max-width: 560px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 4px 0 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+.muted { color: var(--muted); font-size: 14px; }
+button { font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; background: var(--accent); color: #fff; width: 100%; margin-top: 8px; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+#viewport { position: relative; width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; overflow: hidden; }
+#video { width: 100%; height: 100%; object-fit: cover; }
+#guide { position: absolute; inset: 8%; border: 2px solid rgba(255,255,255,.6); border-radius: 8px; pointer-events: none; }
+#grid { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
+#grid span { width: 14px; height: 14px; border-radius: 3px; background: var(--cell); }
+#grid span.on { background: var(--cell-on); }
+#status { font-weight: 600; }
+.ok { color: var(--ok); } .bad { color: var(--bad); }
+pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white-space: pre; background: var(--bg); padding: 8px; border-radius: 8px; }
+.hidden { display: none; }
+#foreign { border-color: var(--accent); }
+.mono { font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>QR 檔案接收</h1>
+
+  <section id="start" class="card">
+    <div>電腦端執行 <span class="mono">qrsend.py</span> 開始輪播後，按下面的按鈕，把鏡頭對準螢幕上的 QR code。</div>
+    <button id="startBtn">開始掃描</button>
+    <div id="startErr" class="bad hidden"></div>
+  </section>
+
+  <section id="scan" class="hidden">
+    <div id="viewport"><video id="video" playsinline muted></video><div id="guide"></div></div>
+    <div class="card" style="margin-top:12px">
+      <div id="status">等待 QR code…</div>
+      <div id="detail" class="muted"></div>
+      <div id="grid"></div>
+      <div id="missing" class="muted"></div>
+    </div>
+    <div id="foreign" class="card hidden">
+      <div>偵測到另一個檔案（session <span id="foreignId" class="mono"></span>）。</div>
+      <div class="row">
+        <button id="switchBtn">改收這個檔案</button>
+        <button id="ignoreBtn" class="secondary">忽略</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="done" class="card hidden">
+    <div id="resultTitle"></div>
+    <div id="resultInfo" class="muted"></div>
+    <div id="resultSha" class="muted mono"></div>
+    <div id="resultActions">
+      <button id="saveBtn">存到「檔案」</button>
+      <div class="row">
+        <button id="shareBtn" class="secondary">分享</button>
+        <button id="copyBtn" class="secondary">複製全文</button>
+      </div>
+    </div>
+    <button id="nextBtn">掃下一個檔</button>
+    <button id="retryBtn" class="secondary hidden">重新掃描這個檔</button>
+    <div id="previewLabel" class="muted" style="margin-top:12px"></div>
+    <pre id="preview"></pre>
+  </section>
+</main>
+
+<script src="jsQR.js"></script>
+<script src="decoder-core.js"></script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var video = $("video");
+  var canvas = document.createElement("canvas");
+  var ctx = canvas.getContext("2d", { willReadFrequently: true });
+  var receiver = new QTDecoder.Receiver();
+  var scanning = false;
+  var pendingForeign = null;
+  var result = null;
+  var resultText = "";
+
+  function show(id, on) { $(id).classList.toggle("hidden", !on); }
+
+  $("startBtn").onclick = async function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      $("startErr").textContent = "這個瀏覽器無法使用相機（需要 HTTPS 與 Safari）。";
+      show("startErr", true);
+      return;
+    }
+    try {
+      video.srcObject = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      await video.play();
+    } catch (e) {
+      $("startErr").textContent = "無法開啟相機：" + e.message;
+      show("startErr", true);
+      return;
+    }
+    show("start", false);
+    show("scan", true);
+    startScanning();
+  };
+
+  function startScanning() {
+    scanning = true;
+    requestAnimationFrame(tick);
+  }
+
+  // 取畫面中央的正方形交給 jsQR
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState >= 2 && video.videoWidth) {
+      var vw = video.videoWidth, vh = video.videoHeight, side = Math.min(vw, vh);
+      var size = Math.min(side, 960);
+      canvas.width = canvas.height = size;
+      ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, size, size);
+      var img = ctx.getImageData(0, 0, size, size);
+      var code = jsQR(img.data, size, size, { inversionAttempts: "dontInvert" });
+      if (code && code.binaryData.length) handle(Uint8Array.from(code.binaryData));
+    }
+    if (scanning) requestAnimationFrame(tick);
+  }
+
+  function handle(bytes) {
+    var ev = receiver.push(bytes);
+    if (ev.type === "foreign") {
+      pendingForeign = ev.session;
+      $("foreignId").textContent = ev.session;
+      show("foreign", true);
+      return;
+    }
+    if (ev.type === "meta" || ev.type === "data") {
+      render();
+      if (receiver.isComplete()) complete();
+    }
+  }
+
+  function render() {
+    var r = receiver, meta = r.meta;
+    if (r.total === null) return;
+    var got = r.count;
+    $("status").textContent = (meta ? meta.name : "（尚未收到檔頭）") + "　" + got + " / " + r.total;
+    $("detail").textContent = "session " + r.session + (meta ? "　" + meta.size + " bytes" : "");
+    var grid = $("grid");
+    if (grid.children.length !== r.total) {
+      grid.textContent = "";
+      for (var i = 0; i < r.total; i++) grid.appendChild(document.createElement("span"));
+    }
+    for (var j = 0; j < r.total; j++) grid.children[j].classList.toggle("on", !!r.chunks[j]);
+    var miss = r.missing().map(function (i) { return i + 1; });
+    var text = miss.length ? "缺：" + miss.slice(0, 30).join(", ") + (miss.length > 30 ? "…" : "") : "";
+    if (!meta) text += (text ? "　" : "") + "還沒收到檔頭";
+    $("missing").textContent = text;
+  }
+
+  async function complete() {
+    scanning = false;
+    result = await receiver.finish();
+    show("scan", false);
+    show("done", true);
+    var meta = receiver.meta;
+    $("resultTitle").textContent = result.ok ? "✓ 已還原 " + meta.name : "✗ 還原失敗：" + result.error;
+    $("resultTitle").className = result.ok ? "ok" : "bad";
+    $("resultInfo").textContent = meta.size + " bytes";
+    $("resultSha").textContent = "SHA-256 " + (result.sha256 || "—");
+    show("resultActions", result.ok);
+    show("retryBtn", !result.ok);
+    resultText = "";
+    $("preview").textContent = "";
+    $("previewLabel").textContent = "";
+    if (result.ok) {
+      var enc = "UTF-8";
+      try {
+        resultText = new TextDecoder("utf-8", { fatal: true }).decode(result.data);
+      } catch (e) {
+        enc = "Big5";
+        resultText = new TextDecoder("big5").decode(result.data);
+      }
+      $("previewLabel").textContent = "預覽（" + enc + "）";
+      $("preview").textContent = resultText.length > 20000 ? resultText.slice(0, 20000) + "\n…" : resultText;
+    }
+  }
+
+  $("saveBtn").onclick = function () {
+    var url = URL.createObjectURL(new Blob([result.data], { type: "application/octet-stream" }));
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = result.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  };
+
+  $("shareBtn").onclick = async function () {
+    var file = new File([result.data], result.name, { type: "text/plain" });
+    if (!navigator.canShare || !navigator.canShare({ files: [file] })) {
+      alert("這個瀏覽器不支援分享檔案");
+      return;
+    }
+    try {
+      await navigator.share({ files: [file] });
+    } catch (e) { /* 使用者取消 */ }
+  };
+
+  $("copyBtn").onclick = async function () {
+    try {
+      await navigator.clipboard.writeText(resultText);
+      $("copyBtn").textContent = "已複製";
+      setTimeout(function () { $("copyBtn").textContent = "複製全文"; }, 1500);
+    } catch (e) {
+      alert("複製失敗：" + e.message);
+    }
+  };
+
+  function backToScan() {
+    result = null;
+    pendingForeign = null;
+    show("foreign", false);
+    show("done", false);
+    show("scan", true);
+    $("grid").textContent = "";
+    $("status").textContent = "等待 QR code…";
+    $("detail").textContent = "";
+    $("missing").textContent = "";
+    startScanning();
+  }
+
+  $("nextBtn").onclick = function () {
+    receiver.reset();
+    backToScan();
+  };
+
+  $("retryBtn").onclick = function () {
+    receiver.switchTo(receiver.session);
+    backToScan();
+  };
+
+  $("switchBtn").onclick = function () {
+    receiver.switchTo(pendingForeign);
+    pendingForeign = null;
+    show("foreign", false);
+    $("grid").textContent = "";
+    $("missing").textContent = "";
+    $("status").textContent = "等待 QR code…";
+    $("detail").textContent = "session " + receiver.session;
+  };
+
+  $("ignoreBtn").onclick = function () {
+    pendingForeign = null;
+    show("foreign", false);
+  };
+})();
+</script>
+</body>
+</html>
