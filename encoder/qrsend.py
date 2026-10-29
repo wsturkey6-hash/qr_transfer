@@ -1015,7 +1015,7 @@ html, body { margin: 0; height: 100%; background: #fff; color: #222; font-family
 <body>
 <div id="wrap">
 <svg id="qr" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect id="bg" fill="#fff"/><path id="mod" fill="#000"/></svg>
-<div id="bar"><span id="info"></span><br><span id="help">空白鍵 暫停/播放　←/→ 上一張/下一張　輸入編號＋Enter 跳到該張　+/- 調速度　F11 全螢幕　（每輪換一種圖案，暫停時每秒換一次）</span></div>
+<div id="bar"><span id="info"></span><br><span id="help">空白鍵 暫停/播放　←/→ 上一張/下一張　輸入編號＋Enter 跳到該張　M 換圖案　+/- 調速度　F11 全螢幕</span></div>
 </div>
 <script>
 var DATA = __DATA__;
@@ -1034,7 +1034,8 @@ var DATA = __DATA__;
     bg.setAttribute("height", String(n));
     mod.setAttribute("d", f.d[variant % f.d.length]);
     var label = f.index === null ? "檔頭" : "第 " + (f.index + 1) + " 張 / 共 " + total + " 張";
-    info.textContent = DATA.name + "　" + label + "　session " + DATA.session + "　" + fps + " fps" +
+    info.textContent = DATA.name + "　" + label + "　圖案 " + (variant % f.d.length + 1) + "/" + f.d.length +
+      "　session " + DATA.session + "　" + fps + " fps" +
       (playing ? "" : "　[暫停]") + (typed ? "　跳到：" + typed : "");
   }
 
@@ -1046,8 +1047,6 @@ var DATA = __DATA__;
         if (pos === 0) { variant++; }
         show(); schedule();
       }, 1000 / fps);
-    } else {
-      timer = setTimeout(function () { variant++; show(); schedule(); }, 1000);
     }
   }
 
@@ -1064,6 +1063,7 @@ var DATA = __DATA__;
     else if (k === "ArrowLeft" || k === "Left") { playing = false; pos = (pos - 1 + frames.length) % frames.length; }
     else if (k === "+" || k === "=") { fps = Math.min(15, fps + 1); }
     else if (k === "-") { fps = Math.max(1, fps - 1); }
+    else if (k === "m" || k === "M") { variant++; }
     else if (/^[0-9]$/.test(k)) { typed += k; }
     else if (k === "Enter") { if (typed) { jump(parseInt(typed, 10)); } typed = ""; }
     else if (k === "Escape") { typed = ""; }

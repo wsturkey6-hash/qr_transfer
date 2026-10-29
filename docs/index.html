@@ -56,6 +56,7 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
       <div id="detail" class="muted"></div>
       <div id="grid"></div>
       <div id="missing" class="muted"></div>
+      <div id="perf" class="muted"></div>
     </div>
     <div id="foreign" class="card hidden">
       <div>偵測到另一個檔案（session <span id="foreignId" class="mono"></span>）。</div>
@@ -98,6 +99,7 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
   var pendingForeign = null;
   var result = null;
   var resultText = "";
+  var perf = { since: 0, scans: 0, ms: 0 };
 
   function show(id, on) { $(id).classList.toggle("hidden", !on); }
 
@@ -110,7 +112,7 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
     try {
       video.srcObject = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       await video.play();
     } catch (e) {
@@ -125,6 +127,7 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
 
   function startScanning() {
     scanning = true;
+    perf = { since: performance.now(), scans: 0, ms: 0 };
     requestAnimationFrame(tick);
   }
 
@@ -132,15 +135,28 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
   function tick() {
     if (!scanning) return;
     if (video.readyState >= 2 && video.videoWidth) {
+      var t0 = performance.now();
       var vw = video.videoWidth, vh = video.videoHeight, side = Math.min(vw, vh);
-      var size = Math.min(side, 1080);
+      var size = Math.min(side, 960);
       canvas.width = canvas.height = size;
       ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, size, size);
       var img = ctx.getImageData(0, 0, size, size);
       var code = jsQR(img.data, size, size, { inversionAttempts: "dontInvert" });
       if (code && code.binaryData.length) handle(Uint8Array.from(code.binaryData));
+      showPerf(vw, vh, size, performance.now() - t0);
     }
     if (scanning) requestAnimationFrame(tick);
+  }
+
+  // 每秒更新一次：相機解析度、每次辨識耗時、每秒辨識次數
+  function showPerf(vw, vh, size, ms) {
+    var now = performance.now();
+    perf.scans++;
+    perf.ms += ms;
+    if (now - perf.since < 1000) return;
+    $("perf").textContent = "相機 " + vw + "×" + vh + "・辨識 " + size + " px・" +
+      Math.round(perf.ms / perf.scans) + " ms/次・" + Math.round(perf.scans * 1000 / (now - perf.since)) + " 次/秒";
+    perf = { since: now, scans: 0, ms: 0 };
   }
 
   function handle(bytes) {
