@@ -27,7 +27,7 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .row button { flex: 1; }
 #viewport { position: relative; width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; overflow: hidden; }
 #video { width: 100%; height: 100%; object-fit: cover; }
-#guide { position: absolute; inset: 8%; border: 2px solid rgba(255,255,255,.6); border-radius: 8px; pointer-events: none; }
+#guide { position: absolute; inset: 22%; border: 2px solid rgba(255,255,255,.6); border-radius: 8px; pointer-events: none; }
 #grid { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
 #grid span { width: 14px; height: 14px; border-radius: 3px; background: var(--cell); }
 #grid span.on { background: var(--cell-on); }
@@ -51,6 +51,7 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
 
   <section id="scan" class="hidden">
     <div id="viewport"><video id="video" playsinline muted></video><div id="guide"></div></div>
+    <div class="muted" style="margin-top:6px">QR 放進框內就好，不必填滿。太近容易失焦，稍微拉遠比較好掃。</div>
     <div class="card" style="margin-top:12px">
       <div id="status">等待 QR code…</div>
       <div id="detail" class="muted"></div>
