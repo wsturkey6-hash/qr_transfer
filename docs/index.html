@@ -110,7 +110,7 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
     try {
       video.srcObject = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
       });
       await video.play();
     } catch (e) {
@@ -133,7 +133,7 @@ pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white
     if (!scanning) return;
     if (video.readyState >= 2 && video.videoWidth) {
       var vw = video.videoWidth, vh = video.videoHeight, side = Math.min(vw, vh);
-      var size = Math.min(side, 960);
+      var size = Math.min(side, 1080);
       canvas.width = canvas.height = size;
       ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, size, size);
       var img = ctx.getImageData(0, 0, size, size);

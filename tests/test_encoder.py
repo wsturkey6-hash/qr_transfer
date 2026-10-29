@@ -120,6 +120,14 @@ class Format(unittest.TestCase):
         for f in data_frames:
             self.assertLessEqual(qrsend.make_qr(f).get_version(), 18)
 
+    def test_mask_variants(self):
+        frame = qrsend.build_frames(verilog_like(5000), "a.v")[2][0]
+        qr = qrsend.make_qr(frame)
+        variants = qrsend.mask_variants(qr, frame, "L")
+        self.assertIs(variants[0], qr)
+        self.assertEqual(sorted(q.get_mask() for q in variants), list(range(8)))
+        self.assertEqual({q.get_version() for q in variants}, {qr.get_version()})
+
 
 class Cli(unittest.TestCase):
     def setUp(self):
@@ -141,6 +149,8 @@ class Cli(unittest.TestCase):
         indexes = [f["index"] for f in data["frames"]]
         self.assertEqual(indexes, qrsend.playlist_order(data["total"]))
         self.assertEqual(data["name"], "top.v")
+        for f in data["frames"]:
+            self.assertEqual(len(set(f["d"])), 8)
 
     def test_export_frames(self):
         d = os.path.join(self.tmp, "frames")

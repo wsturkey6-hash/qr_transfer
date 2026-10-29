@@ -957,8 +957,13 @@ def playlist_order(total):
     return order
 
 
-def make_qr(frame, ecc="L"):
-    return QrCode.encode_binary(frame, ECC_LEVELS[ecc])
+def make_qr(frame, ecc="L", mask=-1):
+    return QrCode.encode_segments([QrSegment.make_bytes(frame)], ECC_LEVELS[ecc], mask=mask)
+
+
+def mask_variants(qr, frame, ecc):
+    """同一片資料的 8 種 mask 版本，自動選的排第一。內容相同，黑白圖案不同。"""
+    return [qr] + [make_qr(frame, ecc, m) for m in range(8) if m != qr.get_mask()]
 
 
 def qr_svg_path(qr):
@@ -1010,13 +1015,13 @@ html, body { margin: 0; height: 100%; background: #fff; color: #222; font-family
 <body>
 <div id="wrap">
 <svg id="qr" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect id="bg" fill="#fff"/><path id="mod" fill="#000"/></svg>
-<div id="bar"><span id="info"></span><br><span id="help">空白鍵 暫停/播放　←/→ 上一張/下一張　輸入編號＋Enter 跳到該張　+/- 調速度　F11 全螢幕</span></div>
+<div id="bar"><span id="info"></span><br><span id="help">空白鍵 暫停/播放　←/→ 上一張/下一張　輸入編號＋Enter 跳到該張　+/- 調速度　F11 全螢幕　（每輪換一種圖案，暫停時每秒換一次）</span></div>
 </div>
 <script>
 var DATA = __DATA__;
 (function () {
   var frames = DATA.frames, total = DATA.total;
-  var pos = 0, playing = true, fps = DATA.fps, timer = null, typed = "";
+  var pos = 0, playing = true, fps = DATA.fps, timer = null, typed = "", variant = 0;
   var svg = document.getElementById("qr"), bg = document.getElementById("bg");
   var mod = document.getElementById("mod"), info = document.getElementById("info");
 
@@ -1027,7 +1032,7 @@ var DATA = __DATA__;
     bg.setAttribute("y", "-4");
     bg.setAttribute("width", String(n));
     bg.setAttribute("height", String(n));
-    mod.setAttribute("d", f.d);
+    mod.setAttribute("d", f.d[variant % f.d.length]);
     var label = f.index === null ? "檔頭" : "第 " + (f.index + 1) + " 張 / 共 " + total + " 張";
     info.textContent = DATA.name + "　" + label + "　session " + DATA.session + "　" + fps + " fps" +
       (playing ? "" : "　[暫停]") + (typed ? "　跳到：" + typed : "");
@@ -1036,7 +1041,13 @@ var DATA = __DATA__;
   function schedule() {
     clearTimeout(timer);
     if (playing) {
-      timer = setTimeout(function () { pos = (pos + 1) % frames.length; show(); schedule(); }, 1000 / fps);
+      timer = setTimeout(function () {
+        pos = (pos + 1) % frames.length;
+        if (pos === 0) { variant++; }
+        show(); schedule();
+      }, 1000 / fps);
+    } else {
+      timer = setTimeout(function () { variant++; show(); schedule(); }, 1000);
     }
   }
 
@@ -1071,14 +1082,16 @@ var DATA = __DATA__;
 """
 
 
-def player_html(name, session, meta_qr, data_qrs, fps):
-    meta_d = qr_svg_path(meta_qr)
+def player_html(name, session, meta_qrs, data_qrs, fps):
+    """meta_qrs 是 meta 片的各 mask 版本；data_qrs 每個元素是一片資料的各 mask 版本。"""
+    meta_d = [qr_svg_path(q) for q in meta_qrs]
     frames = []
     for i in playlist_order(len(data_qrs)):
         if i is None:
-            frames.append({"index": None, "size": meta_qr.get_size(), "d": meta_d})
+            frames.append({"index": None, "size": meta_qrs[0].get_size(), "d": meta_d})
         else:
-            frames.append({"index": i, "size": data_qrs[i].get_size(), "d": qr_svg_path(data_qrs[i])})
+            frames.append({"index": i, "size": data_qrs[i][0].get_size(),
+                           "d": [qr_svg_path(q) for q in data_qrs[i]]})
     data = {"name": name, "session": session.hex(), "total": len(data_qrs), "fps": fps, "frames": frames}
     data_js = json.dumps(data, ensure_ascii=True).replace("<", "\\u003c")
     return PLAYER_HTML.replace("__TITLE__", html.escape(name)).replace("__DATA__", data_js)
@@ -1135,7 +1148,8 @@ def main(argv=None):
 
     out = a.out or os.path.join(tempfile.gettempdir(), "qrsend_{}.html".format(session.hex()))
     with open(out, "w", encoding="utf-8", errors="replace") as f:
-        f.write(player_html(name, session, meta_qr, data_qrs, a.fps))
+        f.write(player_html(name, session, mask_variants(meta_qr, meta_frame, a.ecc),
+                            [mask_variants(q, fr, a.ecc) for q, fr in zip(data_qrs, data_frames)], a.fps))
     say("player    {}".format(out))
     if not a.no_open:
         webbrowser.open(pathlib.Path(out).resolve().as_uri())
